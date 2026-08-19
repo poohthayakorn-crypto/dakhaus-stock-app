@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DAKHAUS · สต็อคหน้าบ้าน</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<style>
+  body { margin: 0; font-family: 'Work Sans', sans-serif; }
+  .oswald { font-family: 'Oswald', sans-serif; }
+  input:focus, select:focus, textarea:focus { outline: none; box-shadow: 0 0 0 2px #2E86AB; }
+  * { box-sizing: border-box; }
+  ::-webkit-scrollbar { height: 6px; width: 6px; }
+  ::-webkit-scrollbar-thumb { background: #2B3F47; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+(function () {
+  // ==========================================================
+  //  ตั้งค่า JSONBin.io  ← แก้ 2 บรรทัดนี้เท่านั้น
+  //  วิธีหาค่า: jsonbin.io → API Keys (X-Master-Key), Bins → Create Bin (Bin ID)
+  //  *** ใช้ Bin คนละอันกับไฟล์หลังบ้าน (krueangprung) ***
+  // ==========================================================
+  var JSONBIN_BIN_ID  = "6a85a3a5f5f4af5e29287b9e";
+  var JSONBIN_API_KEY = "$2a$10$hE63xQIJXb0wq0OcuMcN4.5581igVzvllPR.yA9Qr/FU1lFewSIf.";
+  // ==========================================================
+
+  var h = React.createElement;
+  var useState = React.useState;
+  var useEffect = React.useEffect;
+  var useMemo = React.useMemo;
+  var useRef = React.useRef;
+
+  var CONFIGURED = JSONBIN_BIN_ID.indexOf("ใส่") === -1 && JSONBIN_API_KEY.indexOf("ใส่") === -1
+    && JSONBIN_BIN_ID.length > 8 && JSONBIN_API_KEY.length > 8;
+  var BIN_URL = "https://api.jsonbin.io/v3/b/" + JSONBIN_BIN_ID;
+  var HEADERS = { "Content-Type": "application/json", "X-Master-Key": JSONBIN_API_KEY };
+  var POLL_MS = 15000;
+
+  var LOCAL_KEY = "dakhaus-nakban-state";
+
+  var COLORS = {
+    bg: "#101A1F", card: "#1B2A31", border: "#2B3F47", borderBad: "#7A3230",
+    text: "#EAF2F2", sub: "#7C97A0", primary: "#2E86AB", accent: "#4FB6AE",
+    red: "#D9614C", darkred: "#8A2E22"
+  };
+
+  var DEFAULT_CATEGORIES = [
+    { id: "packaging", label: "บรรจุภัณฑ์/กล่องนำกลับ" },
+    { id: "dining", label: "อุปกรณ์บนโต๊ะ" },
+    { id: "cups", label: "แก้ว/ฝา/หลอด" },
+    { id: "cleaning", label: "ทำความสะอาดหน้าร้าน" },
+    { id: "pos", label: "แคชเชียร์/ใบเสร็จ" },
+    { id: "marketing", label: "ป้าย/สื่อโปรโมท" },
+    { id: "other", label: "อื่นๆ" },
+  ];
+
+  var UNITS = ["ชิ้น", "แพ็ค", "ถุง", "กล่อง", "ม้วน", "ขวด", "โหล", "รีม"];
+
+  var REASONS = [
+    { id: "restock", label: "เติมสต็อก (รับของเข้า)", sign: 1 },
+    { id: "use", label: "ใช้งานหน้าร้าน", sign: -1 },
+    { id: "waste", label: "เสียหาย/ทิ้ง", sign: -1 },
+    { id: "adjust", label: "ปรับยอด (นับสต็อกจริง)", sign: 0 },
+  ];
+
+  var SEED = [
+    { id: "f1", name: "กล่องใส่ไก่ (นำกลับ)", category: "packaging", unit: "ชิ้น", qty: 120, min: 100, par: 300, cost: 4.5, supplier: "", note: "" },
+    { id: "f2", name: "ถุงหูหิ้ว", category: "packaging", unit: "ชิ้น", qty: 200, min: 150, par: 400, cost: 1.2, supplier: "", note: "" },
+    { id: "f3", name: "กล่องเฟรนช์ฟรายส์", category: "packaging", unit: "ชิ้น", qty: 80, min: 100, par: 250, cost: 2, supplier: "", note: "" },
+    { id: "f4", name: "กระดาษทิชชู่โต๊ะ", category: "dining", unit: "ห่อ", qty: 15, min: 10, par: 30, cost: 25, supplier: "", note: "" },
+    { id: "f5", name: "ช้อนส้อมพลาสติกแบบชุด", category: "dining", unit: "ชิ้น", qty: 150, min: 100, par: 300, cost: 1.5, supplier: "", note: "" },
+    { id: "f6", name: "ผ้าเช็ดมือเปียก", category: "dining", unit: "ชิ้น", qty: 100, min: 80, par: 200, cost: 1, supplier: "", note: "" },
+    { id: "f7", name: "แก้วกระดาษ 16 oz", category: "cups", unit: "ชิ้น", qty: 90, min: 100, par: 250, cost: 2.8, supplier: "", note: "" },
+    { id: "f8", name: "ฝาแก้วเครื่องดื่ม", category: "cups", unit: "ชิ้น", qty: 95, min: 100, par: 250, cost: 1.1, supplier: "", note: "" },
+    { id: "f9", name: "หลอดดูด", category: "cups", unit: "ชิ้น", qty: 300, min: 200, par: 500, cost: 0.3, supplier: "", note: "" },
+    { id: "f10", name: "น้ำยาล้างกระจก", category: "cleaning", unit: "ขวด", qty: 3, min: 2, par: 6, cost: 65, supplier: "", note: "" },
+    { id: "f11", name: "น้ำยาเช็ดโต๊ะ", category: "cleaning", unit: "ขวด", qty: 4, min: 3, par: 8, cost: 55, supplier: "", note: "" },
+    { id: "f12", name: "ถุงขยะหน้าร้าน", category: "cleaning", unit: "ม้วน", qty: 5, min: 4, par: 10, cost: 45, supplier: "", note: "" },
+    { id: "f13", name: "กระดาษม้วนใบเสร็จ POS", category: "pos", unit: "ม้วน", qty: 8, min: 5, par: 15, cost: 20, supplier: "", note: "" },
+    { id: "f14", name: "ปากกาคิดเงิน", category: "pos", unit: "ชิ้น", qty: 6, min: 3, par: 10, cost: 10, supplier: "", note: "" },
+    { id: "f15", name: "สติกเกอร์โลโก้ร้าน", category: "marketing", unit: "แผ่น", qty: 200, min: 150, par: 500, cost: 0.8, supplier: "", note: "ติดถุง/กล่อง" },
+  ];
+
+  function heatLevel(qty, min) {
+    if (min <= 0) return "ok";
+    var ratio = qty / min;
+    if (qty <= 0) return "out";
+    if (ratio < 1) return "critical";
+    if (ratio < 1.5) return "low";
+    return "ok";
+  }
+  var LEVEL_STYLE = {
+    ok: { dots: 3, color: COLORS.accent, label: "ปกติ" },
+    low: { dots: 2, color: COLORS.accent, label: "ใกล้ต่ำกว่าขั้นต่ำ" },
+    critical: { dots: 1, color: COLORS.red, label: "ต่ำกว่าขั้นต่ำ" },
+    out: { dots: 0, color: COLORS.darkred, label: "หมดสต็อค" },
+  };
+
+  function DropIcon(props) {
+    return h("svg", { width: props.size, height: props.size, viewBox: "0 0 24 24", fill: props.color, stroke: props.color, strokeWidth: "0" },
+      h("path", { d: "M12 2C8 8 5 11.5 5 15a7 7 0 0 0 14 0c0-3.5-3-7-7-13z" })
+    );
+  }
+  function LevelGauge(props) {
+    var level = heatLevel(props.qty, props.min);
+    var style = LEVEL_STYLE[level];
+    return h("div", { style: { display: "flex", alignItems: "center", gap: 3 }, title: style.label },
+      [1, 2, 3].map(function (i) { return h(DropIcon, { key: i, size: 13, color: i <= style.dots ? style.color : COLORS.border }); })
+    );
+  }
+
+  function fmt(n) {
+    if (n === null || n === undefined || isNaN(n)) return "0";
+    var r = Math.round(n * 100) / 100;
+    return r.toLocaleString("th-TH");
+  }
+  function fmtMoney(n) {
+    return "฿" + Math.round(n).toLocaleString("th-TH");
+  }
+  function fmtDate(ts) {
+    var d = new Date(ts);
+    return d.toLocaleDateString("th-TH", { day: "2-digit", month: "short", year: "2-digit" }) +
+      " " + d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function Btn(props) {
+    var base = {
+      padding: props.small ? "6px 10px" : "9px 14px",
+      borderRadius: 8, fontSize: props.small ? 12 : 14, border: "none", cursor: "pointer",
+      background: props.variant === "primary" ? COLORS.primary : (props.variant === "ghost" ? COLORS.card : COLORS.border),
+      color: props.variant === "primary" ? "#0B1418" : COLORS.text,
+    };
+    if (props.style) Object.assign(base, props.style);
+    return h("button", { onClick: props.onClick, className: props.oswald ? "oswald" : "", style: base, disabled: props.disabled }, props.children);
+  }
+
+  function TextInput(props) {
+    return h("input", Object.assign({
+      style: {
+        fontSize: 14, padding: "9px 11px", borderRadius: 8, width: "100%",
+        background: COLORS.bg, color: COLORS.text, border: "1px solid " + COLORS.border
+      }
+    }, props));
+  }
+
+  function Select(props, children) {
+    var kids = children !== undefined ? children : props.children;
+    var attrs = Object.assign({ style: { fontSize: 14, padding: "9px 11px", borderRadius: 8, width: "100%", background: COLORS.bg, color: COLORS.text, border: "1px solid " + COLORS.border } }, props);
+    delete attrs.children;
+    return h.apply(null, ["select", attrs].concat(Array.isArray(kids) ? kids : [kids]));
+  }
+
+  function Field(label, node) {
+    return h("div", { style: { display: "flex", flexDirection: "column", gap: 4 } },
+      h("label", { style: { fontSize: 11, color: COLORS.sub } }, label),
+      node
+    );
+  }
+
+  function App() {
+    var itemsSt = useState(null); var items = itemsSt[0], setItems = itemsSt[1];
+    var logsSt = useState([]); var logs = logsSt[0], setLogs = logsSt[1];
+    var categoriesSt = useState(null); var categories = categoriesSt[0], setCategories = categoriesSt[1];
+    var showCatManageSt = useState(false); var showCatManage = showCatManageSt[0], setShowCatManage = showCatManageSt[1];
+    var newCatNameSt = useState(""); var newCatName = newCatNameSt[0], setNewCatName = newCatNameSt[1];
+    var syncErrSt = useState(null); var syncErr = syncErrSt[0], setSyncErr = syncErrSt[1];
+    var syncingSt = useState(false); var syncing = syncingSt[0], setSyncing = syncingSt[1];
+    var filterSt = useState("all"); var filter = filterSt[0], setFilter = filterSt[1];
+    var querySt = useState(""); var query = querySt[0], setQuery = querySt[1];
+    var tabSt = useState("items"); var tab = tabSt[0], setTab = tabSt[1];
+
+    var showFormSt = useState(false); var showForm = showFormSt[0], setShowForm = showFormSt[1];
+    var editIdSt = useState(null); var editId = editIdSt[0], setEditId = editIdSt[1];
+    var formSt = useState(emptyForm()); var form = formSt[0], setForm = formSt[1];
+
+    var adjustItemSt = useState(null); var adjustItem = adjustItemSt[0], setAdjustItem = adjustItemSt[1];
+    var adjustAmountSt = useState(""); var adjustAmount = adjustAmountSt[0], setAdjustAmount = adjustAmountSt[1];
+    var adjustReasonSt = useState("use"); var adjustReason = adjustReasonSt[0], setAdjustReason = adjustReasonSt[1];
+    var adjustNoteSt = useState(""); var adjustNote = adjustNoteSt[0], setAdjustNote = adjustNoteSt[1];
+
+    function emptyForm() {
+      return { name: "", category: "packaging", unit: "ชิ้น", qty: "", min: "", par: "", cost: "", supplier: "", note: "" };
+    }
+
+    var stateRef = useRef({ items: null, logs: [], categories: null });
+    var savingRef = useRef(false);
+
+    function applyState(st) {
+      stateRef.current = st;
+      setItems(st.items);
+      setLogs(st.logs);
+      setCategories(st.categories);
+    }
+
+    function readLocal() {
+      try {
+        var raw = localStorage.getItem(LOCAL_KEY);
+        if (raw) {
+          var p = JSON.parse(raw);
+          return {
+            items: Array.isArray(p.items) ? p.items : SEED,
+            logs: Array.isArray(p.logs) ? p.logs : [],
+            categories: Array.isArray(p.categories) ? p.categories : DEFAULT_CATEGORIES
+          };
+        }
+      } catch (e) {}
+      return { items: SEED, logs: [], categories: DEFAULT_CATEGORIES };
+    }
+
+    function loadAll(isBackground) {
+      if (!CONFIGURED) {
+        if (!isBackground) applyState(readLocal());
+        return;
+      }
+      fetch(BIN_URL + "/latest", { headers: HEADERS })
+        .then(function (r) { if (!r.ok) throw new Error("fetch"); return r.json(); })
+        .then(function (data) {
+          if (savingRef.current) return;
+          var rec = (data && data.record) || {};
+          var st = {
+            items: Array.isArray(rec.items) ? rec.items : SEED,
+            logs: Array.isArray(rec.logs) ? rec.logs : [],
+            categories: Array.isArray(rec.categories) ? rec.categories : DEFAULT_CATEGORIES
+          };
+          applyState(st);
+          try { localStorage.setItem(LOCAL_KEY, JSON.stringify(st)); } catch (e) {}
+          setSyncErr(null);
+        })
+        .catch(function () {
+          if (!isBackground) applyState(readLocal());
+          setSyncErr("ต่อคลาวด์ไม่ได้ — กำลังใช้ข้อมูลในเครื่อง");
+        });
+    }
+
+    useEffect(function () {
+      loadAll(false);
+      if (!CONFIGURED) return;
+      var id = setInterval(function () { loadAll(true); }, POLL_MS);
+      return function () { clearInterval(id); };
+    }, []);
+
+    function saveAll(partial) {
+      var merged = Object.assign({}, stateRef.current, partial);
+      applyState(merged);
+      try { localStorage.setItem(LOCAL_KEY, JSON.stringify(merged)); } catch (e) {}
+      if (!CONFIGURED) return;
+      savingRef.current = true;
+      setSyncing(true);
+      fetch(BIN_URL, { method: "PUT", headers: HEADERS, body: JSON.stringify(merged) })
+        .then(function (r) { if (!r.ok) throw new Error("save"); setSyncErr(null); })
+        .catch(function () { setSyncErr("บันทึกขึ้นคลาวด์ไม่สำเร็จ ลองใหม่อีกครั้ง"); })
+        .then(function () { savingRef.current = false; setSyncing(false); });
+    }
+
+    function persistItems(next) { saveAll({ items: next }); }
+    function persistLogs(next) { saveAll({ logs: next }); }
+    function persistCategories(next) { saveAll({ categories: next }); }
+
+    function addCategory() {
+      var label = newCatName.trim();
+      if (!label) return;
+      var id = "cat-" + Date.now();
+      persistCategories(categories.concat([{ id: id, label: label }]));
+      setNewCatName("");
+    }
+    function renameCategory(id, label) {
+      persistCategories(categories.map(function (c) { return c.id === id ? Object.assign({}, c, { label: label }) : c; }));
+    }
+    function deleteCategory(id) {
+      if (id === "other") return;
+      var used = items.filter(function (it) { return it.category === id; }).length;
+      var nextItems = items;
+      if (used > 0) {
+        var ok = window.confirm("มี " + used + " รายการอยู่ในหมวดนี้ ลบแล้วรายการเหล่านี้จะถูกย้ายไปเป็น \"อื่นๆ\" ต้องการลบหมวดหมู่นี้หรือไม่?");
+        if (!ok) return;
+        nextItems = items.map(function (it) { return it.category === id ? Object.assign({}, it, { category: "other" }) : it; });
+      }
+      saveAll({ items: nextItems, categories: categories.filter(function (c) { return c.id !== id; }) });
+      if (filter === id) setFilter("all");
+      if (form.category === id) setForm(Object.assign({}, form, { category: "other" }));
+    }
+
+    function openAddForm() {
+      setEditId(null); setForm(emptyForm()); setShowForm(true);
+    }
+    function openEditForm(it) {
+      setEditId(it.id);
+      setForm({
+        name: it.name, category: it.category, unit: it.unit,
+        qty: String(it.qty), min: String(it.min), par: String(it.par || ""),
+        cost: String(it.cost || ""), supplier: it.supplier || "", note: it.note || ""
+      });
+      setShowForm(true);
+    }
+
+    function saveForm() {
+      if (!form.name.trim() || form.qty === "" || form.min === "") return;
+      var payload = {
+        name: form.name.trim(),
+        category: form.category,
+        unit: form.unit,
+        qty: parseFloat(form.qty) || 0,
+        min: parseFloat(form.min) || 0,
+        par: parseFloat(form.par) || 0,
+        cost: parseFloat(form.cost) || 0,
+        supplier: form.supplier.trim(),
+        note: form.note.trim(),
+      };
+      if (editId) {
+        persistItems(items.map(function (it) { return it.id === editId ? Object.assign({}, it, payload) : it; }));
+      } else {
+        payload.id = "item-" + Date.now();
+        persistItems(items.concat([payload]));
+      }
+      setShowForm(false);
+      setEditId(null);
+      setForm(emptyForm());
+    }
+
+    function removeItem(id) {
+      persistItems(items.filter(function (it) { return it.id !== id; }));
+    }
+
+    function openAdjust(it) {
+      setAdjustItem(it); setAdjustAmount(""); setAdjustReason("use"); setAdjustNote("");
+    }
+
+    function submitAdjust() {
+      if (!adjustItem || adjustAmount === "") return;
+      var amt = parseFloat(adjustAmount);
+      if (isNaN(amt) || amt < 0) return;
+      var reasonObj = REASONS.filter(function (r) { return r.id === adjustReason; })[0];
+      var newQty;
+      var delta;
+      if (reasonObj.sign === 0) {
+        newQty = amt;
+        delta = +(amt - adjustItem.qty).toFixed(2);
+      } else {
+        delta = reasonObj.sign * amt;
+        newQty = Math.max(0, +(adjustItem.qty + delta).toFixed(2));
+      }
+      var nextItems = items.map(function (it) {
+        return it.id === adjustItem.id ? Object.assign({}, it, { qty: newQty }) : it;
+      });
+      var logEntry = {
+        id: "log-" + Date.now(),
+        itemId: adjustItem.id,
+        itemName: adjustItem.name,
+        unit: adjustItem.unit,
+        reason: reasonObj.label,
+        delta: delta,
+        qtyAfter: newQty,
+        note: adjustNote.trim(),
+        ts: Date.now(),
+      };
+      saveAll({ items: nextItems, logs: [logEntry].concat(logs).slice(0, 300) });
+      setAdjustItem(null);
+    }
+
+    function exportData() {
+      var blob = new Blob([JSON.stringify({ items: items, logs: logs, categories: categories }, null, 2)], { type: "application/json" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "dakhaus-nakban-" + new Date().toISOString().slice(0, 10) + ".json";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    function importData(e) {
+      var file = e.target.files && e.target.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        try {
+          var parsed = JSON.parse(reader.result);
+          if (parsed && Array.isArray(parsed.items)) {
+            saveAll({
+              items: parsed.items,
+              logs: Array.isArray(parsed.logs) ? parsed.logs : [],
+              categories: Array.isArray(parsed.categories) ? parsed.categories : categories
+            });
+          } else if (Array.isArray(parsed)) {
+            saveAll({ items: parsed });
+          }
+        } catch (err) {}
+      };
+      reader.readAsText(file);
+      e.target.value = "";
+    }
+
+    var filtered = useMemo(function () {
+      if (!items) return [];
+      return items
+        .filter(function (it) { return filter === "all" ? true : it.category === filter; })
+        .filter(function (it) { return it.name.toLowerCase().indexOf(query.toLowerCase()) !== -1; })
+        .sort(function (a, b) {
+          var order = { out: 0, critical: 1, low: 2, ok: 3 };
+          return order[heatLevel(a.qty, a.min)] - order[heatLevel(b.qty, b.min)];
+        });
+    }, [items, filter, query]);
+
+    var stats = useMemo(function () {
+      if (!items) return { total: 0, low: 0, value: 0 };
+      var low = items.filter(function (it) { var l = heatLevel(it.qty, it.min); return l === "critical" || l === "out"; }).length;
+      var value = items.reduce(function (sum, it) { return sum + (it.qty * (it.cost || 0)); }, 0);
+      return { total: items.length, low: low, value: value };
+    }, [items]);
+
+    var CAT_LABEL = useMemo(function () {
+      var map = {};
+      (categories || []).forEach(function (c) { map[c.id] = c.label; });
+      return map;
+    }, [categories]);
+
+    if (!items || !categories) {
+      return h("div", { style: { background: COLORS.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" } },
+        h("p", { className: "oswald", style: { color: COLORS.text, letterSpacing: 2, fontSize: 14 } }, "กำลังโหลด...")
+      );
+    }
+
+    // ---------- Header ----------
+    var header = h("div", { style: { background: "linear-gradient(135deg, #1B2A31 0%, #101A1F 100%)", borderBottom: "3px solid " + COLORS.primary, padding: "24px 18px 16px" } },
+      h("h1", { className: "oswald", style: { color: COLORS.text, fontSize: 21, letterSpacing: 0.5, margin: 0 } },
+        "DAKHAUS ", h("span", { style: { color: COLORS.primary } }, "หน้าบ้าน")
+      ),
+      h("p", { style: { color: COLORS.sub, fontSize: 12, marginTop: 2 } }, "ระบบสต็อคหน้าร้าน · บรรจุภัณฑ์ อุปกรณ์โต๊ะ ของใช้หน้าร้าน"),
+      h("div", { style: { display: "flex", alignItems: "center", gap: 6, marginTop: 8 } },
+        h("span", {
+          style: {
+            width: 7, height: 7, borderRadius: 999,
+            background: !CONFIGURED ? COLORS.sub : (syncErr ? COLORS.red : (syncing ? COLORS.accent : "#5FBF9E"))
+          }
+        }),
+        h("span", { style: { fontSize: 11, color: !CONFIGURED ? COLORS.sub : (syncErr ? COLORS.red : COLORS.sub) } },
+          !CONFIGURED ? "ยังไม่ได้ตั้งค่าคลาวด์ — บันทึกเฉพาะเครื่องนี้"
+            : (syncErr ? syncErr : (syncing ? "กำลังบันทึกขึ้นคลาวด์..." : "เชื่อมคลาวด์แล้ว · sync ทุกเครื่อง"))
+        ),
+        CONFIGURED ? h("button", {
+          onClick: function () { loadAll(false); },
+          style: { marginLeft: "auto", background: "none", border: "1px solid " + COLORS.border, borderRadius: 6, color: COLORS.sub, fontSize: 11, padding: "3px 9px", cursor: "pointer" }
+        }, "↻ รีเฟรช") : null
+      ),
+      h("div", { style: { display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" } },
+        statCard("รายการทั้งหมด", stats.total, COLORS.text),
+        statCard("ใกล้/หมดสต็อค", stats.low, stats.low > 0 ? COLORS.red : COLORS.text),
+        statCard("มูลค่าคงคลังโดยประมาณ", fmtMoney(stats.value), COLORS.accent)
+      )
+    );
+
+    function statCard(label, value, color) {
+      return h("div", { style: { flex: "1 1 100px", minWidth: 100, background: "rgba(0,0,0,0.25)", border: "1px solid " + COLORS.border, borderRadius: 10, padding: "8px 10px" } },
+        h("p", { style: { fontSize: 10, color: COLORS.sub, margin: 0 } }, label),
+        h("p", { className: "oswald", style: { fontSize: 18, color: color, margin: 0, marginTop: 2 } }, value)
+      );
+    }
+
+    // ---------- Tabs ----------
+    var tabs = h("div", { style: { display: "flex", gap: 6, padding: "12px 18px 0" } },
+      ["items", "log"].map(function (t) {
+        return h("button", {
+          key: t, onClick: function () { setTab(t); },
+          className: "oswald",
+          style: {
+            padding: "7px 16px", borderRadius: 999, fontSize: 12, letterSpacing: 0.5, cursor: "pointer",
+            background: tab === t ? COLORS.accent : COLORS.card,
+            color: tab === t ? "#0B1418" : COLORS.sub,
+            border: "1px solid " + (tab === t ? COLORS.accent : COLORS.border),
+          }
+        }, t === "items" ? "รายการสต็อค" : "ประวัติการเคลื่อนไหว");
+      })
+    );
+
+    var content;
+    if (tab === "items") {
+      content = renderItemsTab();
+    } else {
+      content = renderLogTab();
+    }
+
+    function renderItemsTab() {
+      var controls = h("div", { style: { padding: "14px 18px 0" } },
+        h("div", { style: { display: "flex", gap: 8, marginBottom: 10 } },
+          h("div", { style: { flex: 1 } },
+            TextInput({ value: query, onChange: function (e) { setQuery(e.target.value); }, placeholder: "ค้นหาของใช้หน้าร้าน..." })
+          ),
+          Btn({ variant: "primary", oswald: true, onClick: openAddForm, children: "+ เพิ่มรายการ" })
+        ),
+        h("div", { style: { display: "flex", gap: 8, marginBottom: 12 } },
+          h("div", { style: { display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 } },
+            [{ id: "all", label: "ทั้งหมด" }].concat(categories).map(function (c) {
+              return h("button", {
+                key: c.id, onClick: function () { setFilter(c.id); },
+                style: {
+                  padding: "6px 12px", borderRadius: 999, fontSize: 12, whiteSpace: "nowrap", cursor: "pointer",
+                  background: filter === c.id ? COLORS.accent : COLORS.card,
+                  color: filter === c.id ? "#0B1418" : "#9AB6BC",
+                  border: "1px solid " + (filter === c.id ? COLORS.accent : COLORS.border),
+                }
+              }, c.label);
+            })
+          )
+        ),
+        h("div", { style: { display: "flex", gap: 6, marginBottom: 6 } },
+          Btn({ variant: "ghost", small: true, onClick: function () { setShowCatManage(true); }, children: "⚙ จัดการหมวดหมู่" }),
+          Btn({ variant: "ghost", small: true, onClick: exportData, children: "⬇ ส่งออกข้อมูล" }),
+          h("label", { style: { padding: "6px 10px", borderRadius: 8, fontSize: 12, background: COLORS.card, border: "1px solid " + COLORS.border, cursor: "pointer" } },
+            "⬆ นำเข้าข้อมูล",
+            h("input", { type: "file", accept: "application/json", onChange: importData, style: { display: "none" } })
+          )
+        )
+      );
+
+      var cards = filtered.length === 0
+        ? h("p", { style: { color: COLORS.sub, fontSize: 14, textAlign: "center", padding: "32px 0" } }, "ไม่พบรายการ ลองเพิ่มของใช้ใหม่ดูสิ")
+        : filtered.map(function (it) {
+            var level = heatLevel(it.qty, it.min);
+            var style = LEVEL_STYLE[level];
+            var estValue = it.qty * (it.cost || 0);
+            return h("div", {
+              key: it.id,
+              style: {
+                borderRadius: 12, padding: "12px 14px", background: COLORS.card,
+                border: "1px solid " + ((level === "critical" || level === "out") ? COLORS.borderBad : COLORS.border),
+                marginBottom: 10
+              }
+            },
+              h("div", { style: { display: "flex", alignItems: "flex-start", justifyContent: "space-between" } },
+                h("div", { style: { flex: 1, minWidth: 0 } },
+                  h("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } },
+                    h("p", { className: "oswald", style: { color: COLORS.text, fontSize: 15, margin: 0 } }, it.name),
+                    h(LevelGauge, { qty: it.qty, min: it.min }),
+                    h("span", { style: { fontSize: 10, padding: "2px 7px", borderRadius: 999, background: "rgba(79,182,174,0.14)", color: COLORS.accent } }, CAT_LABEL[it.category])
+                  ),
+                  h("p", { style: { color: COLORS.sub, fontSize: 11.5, marginTop: 3 } },
+                    "ขั้นต่ำ " + fmt(it.min) + " " + it.unit + (it.par ? " · เป้าหมาย " + fmt(it.par) + " " + it.unit : "") +
+                    (it.cost ? " · " + fmtMoney(it.cost) + "/" + it.unit : "")
+                  ),
+                  it.note ? h("p", { style: { color: COLORS.sub, fontSize: 11, marginTop: 2, fontStyle: "italic" } }, it.note) : null
+                ),
+                h("div", { style: { display: "flex", gap: 4 } },
+                  h("button", { onClick: function () { openEditForm(it); }, style: { background: "none", border: "none", cursor: "pointer", color: COLORS.sub, fontSize: 13 } }, "แก้ไข"),
+                  h("button", { onClick: function () { removeItem(it.id); }, style: { background: "none", border: "none", cursor: "pointer", color: COLORS.sub, fontSize: 15 } }, "✕")
+                )
+              ),
+              h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 } },
+                h("div", { style: { display: "flex", alignItems: "baseline", gap: 4 } },
+                  h("span", { className: "oswald", style: { fontSize: 20, color: style.color } }, fmt(it.qty)),
+                  h("span", { style: { fontSize: 12, color: COLORS.sub } }, it.unit),
+                  it.cost ? h("span", { style: { fontSize: 11, color: COLORS.sub, marginLeft: 6 } }, "≈ " + fmtMoney(estValue)) : null
+                ),
+                h("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+                  h("span", { style: { fontSize: 11, color: style.color } }, style.label),
+                  Btn({ variant: "ghost", small: true, onClick: function () { openAdjust(it); }, children: "ปรับสต็อก" })
+                )
+              )
+            );
+          });
+
+      return h("div", null, controls, h("div", { style: { padding: "0 18px 24px" } }, cards));
+    }
+
+    function renderLogTab() {
+      if (logs.length === 0) {
+        return h("p", { style: { color: COLORS.sub, fontSize: 14, textAlign: "center", padding: "40px 18px" } }, "ยังไม่มีประวัติการเคลื่อนไหวสต็อก");
+      }
+      return h("div", { style: { padding: "14px 18px 24px", display: "flex", flexDirection: "column", gap: 8 } },
+        logs.map(function (l) {
+          var positive = l.delta > 0;
+          var color = l.delta === 0 ? COLORS.sub : (positive ? "#5FBF9E" : COLORS.red);
+          var sign = l.delta > 0 ? "+" : "";
+          return h("div", { key: l.id, style: { background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 10, padding: "10px 12px" } },
+            h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" } },
+              h("div", null,
+                h("p", { style: { color: COLORS.text, fontSize: 13, margin: 0, fontWeight: 600 } }, l.itemName),
+                h("p", { style: { color: COLORS.sub, fontSize: 11, margin: 0, marginTop: 2 } }, l.reason + (l.note ? " · " + l.note : ""))
+              ),
+              h("div", { style: { textAlign: "right" } },
+                h("p", { className: "oswald", style: { color: color, fontSize: 14, margin: 0 } }, sign + fmt(l.delta) + " " + l.unit),
+                h("p", { style: { color: COLORS.sub, fontSize: 10, margin: 0, marginTop: 2 } }, "คงเหลือ " + fmt(l.qtyAfter) + " " + l.unit)
+              )
+            ),
+            h("p", { style: { color: COLORS.sub, fontSize: 10, margin: 0, marginTop: 6 } }, fmtDate(l.ts))
+          );
+        })
+      );
+    }
+
+    // ---------- Add/Edit modal ----------
+    var formModal = null;
+    if (showForm) {
+      formModal = h("div", {
+        onClick: function () { setShowForm(false); },
+        style: { position: "fixed", inset: 0, display: "flex", alignItems: "flex-end", justifyContent: "center", background: "rgba(0,0,0,0.6)", zIndex: 50 }
+      },
+        h("div", { onClick: function (e) { e.stopPropagation(); }, style: { width: "100%", maxWidth: 440, maxHeight: "88vh", overflowY: "auto", borderRadius: "16px 16px 0 0", padding: "18px 18px 26px", background: COLORS.card, borderTop: "3px solid " + COLORS.primary } },
+          h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 } },
+            h("h2", { className: "oswald", style: { color: COLORS.text, fontSize: 17, margin: 0 } }, editId ? "แก้ไขรายการ" : "เพิ่มของใช้หน้าร้านใหม่"),
+            h("button", { onClick: function () { setShowForm(false); }, style: { background: "none", border: "none", color: COLORS.sub, fontSize: 18, cursor: "pointer" } }, "✕")
+          ),
+          h("div", { style: { display: "flex", flexDirection: "column", gap: 10 } },
+            Field("ชื่อของใช้", TextInput({ value: form.name, onChange: function (e) { setForm(Object.assign({}, form, { name: e.target.value })); }, placeholder: "เช่น แก้วกระดาษ 16 oz" })),
+            Field("หมวดหมู่", Select({
+              value: form.category,
+              onChange: function (e) { setForm(Object.assign({}, form, { category: e.target.value })); }
+            }, categories.map(function (c) { return h("option", { key: c.id, value: c.id }, c.label); }))),
+            h("div", { style: { display: "flex", gap: 8 } },
+              h("div", { style: { flex: 1 } }, Field("จำนวนปัจจุบัน", TextInput({ type: "number", value: form.qty, onChange: function (e) { setForm(Object.assign({}, form, { qty: e.target.value })); } }))),
+              h("div", { style: { flex: 1 } }, Field("หน่วย", Select({ value: form.unit, onChange: function (e) { setForm(Object.assign({}, form, { unit: e.target.value })); } }, UNITS.map(function (u) { return h("option", { key: u, value: u }, u); }))))
+            ),
+            h("div", { style: { display: "flex", gap: 8 } },
+              h("div", { style: { flex: 1 } }, Field("ขั้นต่ำที่ต้องมี (แจ้งเตือน)", TextInput({ type: "number", value: form.min, onChange: function (e) { setForm(Object.assign({}, form, { min: e.target.value })); } }))),
+              h("div", { style: { flex: 1 } }, Field("เป้าหมายสต็อก (par level)", TextInput({ type: "number", value: form.par, onChange: function (e) { setForm(Object.assign({}, form, { par: e.target.value })); } })))
+            ),
+            Field("ต้นทุนต่อหน่วย (บาท, ไม่บังคับ)", TextInput({ type: "number", value: form.cost, onChange: function (e) { setForm(Object.assign({}, form, { cost: e.target.value })); }, placeholder: "0" })),
+            Field("ซัพพลายเออร์ (ไม่บังคับ)", TextInput({ value: form.supplier, onChange: function (e) { setForm(Object.assign({}, form, { supplier: e.target.value })); } })),
+            Field("หมายเหตุ (ไม่บังคับ)", TextInput({ value: form.note, onChange: function (e) { setForm(Object.assign({}, form, { note: e.target.value })); }, placeholder: "เช่น ใช้กับโปรโมชั่นไหน" })),
+            Btn({ variant: "primary", oswald: true, onClick: saveForm, style: { marginTop: 4, padding: "12px" }, children: editId ? "บันทึกการแก้ไข" : "เพิ่มรายการ" })
+          )
+        )
+      );
+    }
+
+    // ---------- Adjust stock modal ----------
+    var adjustModal = null;
+    if (adjustItem) {
+      var reasonObj = REASONS.filter(function (r) { return r.id === adjustReason; })[0];
+      var previewQty = null;
+      var amtNum = parseFloat(adjustAmount);
+      if (!isNaN(amtNum) && amtNum >= 0) {
+        if (reasonObj.sign === 0) previewQty = amtNum;
+        else previewQty = Math.max(0, +(adjustItem.qty + reasonObj.sign * amtNum).toFixed(2));
+      }
+      adjustModal = h("div", {
+        onClick: function () { setAdjustItem(null); },
+        style: { position: "fixed", inset: 0, display: "flex", alignItems: "flex-end", justifyContent: "center", background: "rgba(0,0,0,0.6)", zIndex: 50 }
+      },
+        h("div", { onClick: function (e) { e.stopPropagation(); }, style: { width: "100%", maxWidth: 420, borderRadius: "16px 16px 0 0", padding: "18px 18px 26px", background: COLORS.card, borderTop: "3px solid " + COLORS.accent } },
+          h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 } },
+            h("h2", { className: "oswald", style: { color: COLORS.text, fontSize: 16, margin: 0 } }, "ปรับสต็อก: " + adjustItem.name),
+            h("button", { onClick: function () { setAdjustItem(null); }, style: { background: "none", border: "none", color: COLORS.sub, fontSize: 18, cursor: "pointer" } }, "✕")
+          ),
+          h("p", { style: { color: COLORS.sub, fontSize: 12, margin: "0 0 14px" } }, "คงเหลือปัจจุบัน " + fmt(adjustItem.qty) + " " + adjustItem.unit),
+          h("div", { style: { display: "flex", flexDirection: "column", gap: 10 } },
+            Field("ประเภทการทำรายการ", Select({ value: adjustReason, onChange: function (e) { setAdjustReason(e.target.value); } },
+              REASONS.map(function (r) { return h("option", { key: r.id, value: r.id }, r.label); })
+            )),
+            Field(reasonObj.sign === 0 ? "จำนวนที่นับได้จริง (" + adjustItem.unit + ")" : "จำนวน (" + adjustItem.unit + ")",
+              TextInput({ type: "number", value: adjustAmount, onChange: function (e) { setAdjustAmount(e.target.value); }, placeholder: "0", autoFocus: true })
+            ),
+            Field("หมายเหตุ (ไม่บังคับ)", TextInput({ value: adjustNote, onChange: function (e) { setAdjustNote(e.target.value); }, placeholder: "เช่น รับของจากซัพพลายเออร์" })),
+            previewQty !== null ? h("p", { style: { fontSize: 12, color: COLORS.sub } }, "คงเหลือหลังบันทึก: ", h("span", { className: "oswald", style: { color: COLORS.accent, fontSize: 15 } }, fmt(previewQty) + " " + adjustItem.unit)) : null,
+            Btn({ variant: "primary", oswald: true, onClick: submitAdjust, style: { marginTop: 4, padding: "12px" }, children: "บันทึก" })
+          )
+        )
+      );
+    }
+
+    // ---------- Category management modal ----------
+    var catManageModal = null;
+    if (showCatManage) {
+      catManageModal = h("div", {
+        onClick: function () { setShowCatManage(false); },
+        style: { position: "fixed", inset: 0, display: "flex", alignItems: "flex-end", justifyContent: "center", background: "rgba(0,0,0,0.6)", zIndex: 60 }
+      },
+        h("div", { onClick: function (e) { e.stopPropagation(); }, style: { width: "100%", maxWidth: 440, maxHeight: "85vh", overflowY: "auto", borderRadius: "16px 16px 0 0", padding: "18px 18px 26px", background: COLORS.card, borderTop: "3px solid " + COLORS.primary } },
+          h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 } },
+            h("h2", { className: "oswald", style: { color: COLORS.text, fontSize: 17, margin: 0 } }, "จัดการหมวดหมู่"),
+            h("button", { onClick: function () { setShowCatManage(false); }, style: { background: "none", border: "none", color: COLORS.sub, fontSize: 18, cursor: "pointer" } }, "✕")
+          ),
+          h("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 } },
+            categories.map(function (c) {
+              return h("div", { key: c.id, style: { display: "flex", gap: 6, alignItems: "center" } },
+                h("input", {
+                  value: c.label,
+                  onChange: function (e) { renameCategory(c.id, e.target.value); },
+                  style: { flex: 1, fontSize: 13, padding: "8px 10px", borderRadius: 8, background: COLORS.bg, color: COLORS.text, border: "1px solid " + COLORS.border }
+                }),
+                c.id === "other"
+                  ? h("span", { style: { fontSize: 10, color: COLORS.sub, width: 44, textAlign: "center" } }, "ค่าเริ่มต้น")
+                  : h("button", { onClick: function () { deleteCategory(c.id); }, style: { background: "none", border: "none", cursor: "pointer", color: COLORS.sub, fontSize: 15, width: 30 } }, "✕")
+              );
+            })
+          ),
+          h("div", { style: { display: "flex", gap: 6 } },
+            h("input", {
+              value: newCatName,
+              onChange: function (e) { setNewCatName(e.target.value); },
+              placeholder: "ชื่อหมวดหมู่ใหม่",
+              style: { flex: 1, fontSize: 13, padding: "9px 11px", borderRadius: 8, background: COLORS.bg, color: COLORS.text, border: "1px solid " + COLORS.border }
+            }),
+            Btn({ variant: "primary", oswald: true, small: true, onClick: addCategory, children: "+ เพิ่ม" })
+          ),
+          h("p", { style: { fontSize: 11, color: COLORS.sub, marginTop: 12 } }, "หมายเหตุ: ถ้าลบหมวดที่มีรายการอยู่ ระบบจะย้ายรายการเหล่านั้นไปหมวด \"อื่นๆ\" ให้อัตโนมัติ")
+        )
+      );
+    }
+
+    return h("div", { style: { background: COLORS.bg, minHeight: "100vh" } }, header, tabs, content, formModal, adjustModal, catManageModal);
+  }
+
+  var root = ReactDOM.createRoot(document.getElementById("root"));
+  root.render(h(App));
+})();
+</script>
+</body>
+</html>

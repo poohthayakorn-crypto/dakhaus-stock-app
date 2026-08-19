@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>DAKHAUS STOCK</title>
+<meta name="theme-color" content="#141014" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="DAKHAUS" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh;
+    font-family: 'Work Sans', sans-serif;
+    background: #141014;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .wrap { width: 100%; max-width: 420px; }
+  h1 {
+    font-family: 'Oswald', sans-serif;
+    color: #F5EDE4; font-size: 30px; letter-spacing: 1px;
+    margin: 0; text-align: center;
+  }
+  h1 span { color: #D64933; }
+  .sub {
+    color: #8A7A6D; font-size: 13px; text-align: center;
+    margin: 6px 0 32px;
+  }
+  a.card {
+    display: block; text-decoration: none;
+    border-radius: 14px; padding: 20px 20px;
+    margin-bottom: 14px;
+    border: 1px solid;
+    transition: transform .12s ease;
+  }
+  a.card:active { transform: scale(0.985); }
+  .back { background: #2A211C; border-color: #D64933; }
+  .front { background: #1B2A31; border-color: #2E86AB; }
+  .label {
+    font-family: 'Oswald', sans-serif;
+    font-size: 19px; letter-spacing: .5px; margin: 0;
+  }
+  .back .label { color: #F5EDE4; }
+  .front .label { color: #EAF2F2; }
+  .desc { font-size: 12px; margin: 5px 0 0; }
+  .back .desc { color: #8A7A6D; }
+  .front .desc { color: #7C97A0; }
+  .tag {
+    display: inline-block; font-size: 10px;
+    padding: 3px 9px; border-radius: 999px; margin-bottom: 9px;
+  }
+  .back .tag { background: rgba(214,73,51,.15); color: #D64933; }
+  .front .tag { background: rgba(79,182,174,.15); color: #4FB6AE; }
+  .note {
+    color: #6B5D52; font-size: 11px; text-align: center;
+    margin-top: 26px; line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>DAKHAUS <span>STOCK</span></h1>
+  <p class="sub">ระบบจัดการสต็อค · แด็กเฮาส์</p>
+
+  <a class="card back" href="krueangprung.html">
+    <span class="tag">หลังบ้าน</span>
+    <p class="label">สต็อคเครื่องปรุง</p>
+    <p class="desc">ซอส เครื่องเทศ แป้ง สารเติมแต่ง วัตถุดิบปรุงรส</p>
+  </a>
+
+  <a class="card front" href="nakban.html">
+    <span class="tag">หน้าบ้าน</span>
+    <p class="label">สต็อคหน้าร้าน</p>
+    <p class="desc">บรรจุภัณฑ์ อุปกรณ์โต๊ะ แก้ว ของใช้หน้าร้าน</p>
+  </a>
+
+  <p class="note">ตั้งค่า JSONBin ในแต่ละไฟล์เพื่อให้ข้อมูล sync ทุกเครื่อง<br>ดูวิธีตั้งค่าที่ส่วนหัวของไฟล์ krueangprung.html / nakban.html</p>
+</div>
+</body>
+</html>
