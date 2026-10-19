@@ -242,11 +242,16 @@
     }
 
     useEffect(function () {
-      loadAll(false);
-      if (!CONFIGURED) return;
-      var id = setInterval(function () { loadAll(true); }, POLL_MS);
-      return function () { clearInterval(id); };
-    }, []);
+  loadAll(false);                       // ดึงตอนเปิดแอป
+  if (!CONFIGURED) return;
+  function onVisible() {
+    if (!document.hidden && !savingRef.current) loadAll(true);
+  }
+  document.addEventListener("visibilitychange", onVisible);
+  return function () {
+    document.removeEventListener("visibilitychange", onVisible);
+  };
+}, []);
 
     function saveAll(partial) {
       var merged = Object.assign({}, stateRef.current, partial);
